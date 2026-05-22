@@ -1,0 +1,1 @@
+python train.py --data_name kinetics400 --lr 0.0001 --num_epochs 10 --seed 42 --use_wandb

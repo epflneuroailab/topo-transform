@@ -1,0 +1,94 @@
+cache/
+wandb/
+*.png
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Spyder
+.spyderproject
+.spyproject
+
+# Mac
+.DS_Store
+
+# Data files
+*.csv
+*.dat
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# Model checkpoints
+*.pth
+*.ckpt
+*.pt
+*.safetensors
+checkpoints/
+runs/
+logs/
+wandb/
+
+# Large files
+*.zip
+*.tar.gz
+*.rar
+
+# Temporary files
+*.log
+*.tmp
+*.swp
+*~
+
+# Environment variables
+.env
+.env.local
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+
+# pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json

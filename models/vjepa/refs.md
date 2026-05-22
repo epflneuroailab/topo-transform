@@ -1,0 +1,3 @@
+# VJEPA
+
+[[Article](https://scontent-zrh1-1.xx.fbcdn.net/v/t39.2365-6/427986745_768441298640104_1604906292521363076_n.pdf?_nc_cat=103&ccb=1-7&_nc_sid=3c67a6&_nc_ohc=ldElsmIwlb8Q7kNvwFc4ppj&_nc_oc=Adn0UmIlbyMlEOW1QzrXVQaZ3-Gj2ewzqVm8WqknHqoXztNBUrICacz67TSaKUZrstI&_nc_zt=14&_nc_ht=scontent-zrh1-1.xx&_nc_gid=5ZOkmX6uzaNIGtNeLyJhpQ&oh=00_AfG9iIkaamJc1hlTyKZYMgEwX5A8we4VGwOIhBnPeFP3DQ&oe=67FD4131)][[GitHub](https://github.com/facebookresearch/jepa/tree/main)]
