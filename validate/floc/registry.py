@@ -69,7 +69,12 @@ FLOC_TESTS = {
     "vpnl_detailed": FlocTestSpec(
         name="vpnl_detailed",
         model_runner=_category_runner("vpnl_detailed"),
-        include_in_localizers=True,
+        include_in_localizers=False,
+    ),
+    "vpnl_detail_classes": FlocTestSpec(
+        name="vpnl_detail_classes",
+        model_runner=_category_runner("vpnl_detail_classes"),
+        include_in_localizers=False,
     ),
     "motion": FlocTestSpec(
         name="motion",

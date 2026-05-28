@@ -2,7 +2,9 @@ import config
 
 import torch
 from topo import TopoTransformedCLIP
+from topo import TopoTransformedLLCNN
 from topo import TopoTransformedTDANN
+from topo import TopoTransformedTopoNets
 from topo import TopoTransformedVideoMAE
 from topo import TopoTransformedVJEPA
 from topo import SOMTopoVJEPA
@@ -43,6 +45,14 @@ def _is_clip_checkpoint(checkpoint_name):
 
 def _is_videomae_checkpoint(checkpoint_name):
     return "videomae_" in checkpoint_name
+
+
+def _is_llcnn_checkpoint(checkpoint_name):
+    return checkpoint_name.startswith("llcnn.")
+
+
+def _is_toponets_checkpoint(checkpoint_name):
+    return checkpoint_name.startswith("toponets.")
 
 
 def _resolve_tissue_config(checkpoint_name):
@@ -144,6 +154,50 @@ def _load_videomae_model(checkpoint_name, device):
     return model, epoch
 
 
+def _load_llcnn_model(checkpoint_name, device):
+    from models.llcnn import LLCNN_DEFAULT_CKPT
+
+    checkpoint_path = LLCNN_DEFAULT_CKPT
+    layer_name = "layer4.1"
+    if checkpoint_name.startswith("llcnn.") and ":" in checkpoint_name:
+        _, spec = checkpoint_name.split(":", 1)
+        parts = [part for part in spec.split(",") if part]
+        for part in parts:
+            key, value = part.split("=", 1)
+            if key == "path":
+                checkpoint_path = value
+            elif key == "layer":
+                layer_name = value
+    model = TopoTransformedLLCNN(checkpoint_path=checkpoint_path, layer_name=layer_name)
+    model.name = checkpoint_name
+    epoch = getattr(model.model, "epoch", None)
+    print(f"Loaded TopoTransformedLLCNN model from {checkpoint_path} (epoch {epoch}).")
+    return model, epoch
+
+
+def _load_toponets_model(checkpoint_name, device):
+    from models.toponets import TOPONETS_DEFAULT_CKPT
+
+    checkpoint_path = TOPONETS_DEFAULT_CKPT
+    layer_name = "layer4.1.conv2"
+    tau = 10.0
+    if checkpoint_name.startswith("toponets.") and ":" in checkpoint_name:
+        _, spec = checkpoint_name.split(":", 1)
+        parts = [part for part in spec.split(",") if part]
+        for part in parts:
+            key, value = part.split("=", 1)
+            if key == "path":
+                checkpoint_path = value
+            elif key == "layer":
+                layer_name = value
+            elif key == "tau":
+                tau = float(value)
+    model = TopoTransformedTopoNets(checkpoint_path=checkpoint_path, layer_name=layer_name, tau=tau)
+    model.name = checkpoint_name
+    print(f"Loaded TopoTransformedTopoNets model tau={tau:g}, layer={layer_name}, checkpoint={checkpoint_path}.")
+    return model, None
+
+
 def _load_vjepa_model(checkpoint_name, device):
     checkpoint_path, no_transform = _resolve_vjepa_checkpoint(checkpoint_name)
     tissue_config, rf_overlap, inf_neighborhood = _resolve_tissue_config(checkpoint_name)
@@ -177,6 +231,10 @@ def load_transformed_model(checkpoint_name, device="cuda"):
         model, epoch = _load_clip_model(checkpoint_name, device)
     elif _is_videomae_checkpoint(checkpoint_name):
         model, epoch = _load_videomae_model(checkpoint_name, device)
+    elif _is_llcnn_checkpoint(checkpoint_name):
+        model, epoch = _load_llcnn_model(checkpoint_name, device)
+    elif _is_toponets_checkpoint(checkpoint_name):
+        model, epoch = _load_toponets_model(checkpoint_name, device)
     else:
         model, epoch = _load_vjepa_model(checkpoint_name, device)
 

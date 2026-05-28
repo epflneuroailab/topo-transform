@@ -1,5 +1,6 @@
 from utils import cached
 from models import clip_transform
+from models import llcnn_transform
 from models import vit_transform
 from validate.floc.registry import LOCALIZER_DATASETS
 from validate.floc.registry import get_model_localizer_runner
@@ -22,6 +23,8 @@ def _get_layer_positions(model):
 
 
 def _get_input_transform(model):
+    if model.__class__.__name__ == "TopoTransformedLLCNN":
+        return llcnn_transform
     return clip_transform if model.__class__.__name__ == "TopoTransformedCLIP" else vit_transform
 
 

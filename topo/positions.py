@@ -112,7 +112,7 @@ def create_position_dict(cfg: LayerPlacement, inf_neighborhood: bool = False) ->
         "dims": cfg.dims,
     }
 
-def create_position_dict_single_sheet(cfgs: List[LayerPlacement]) -> Dict[str, Any]:
+def create_position_dict_single_sheet(cfgs: List[LayerPlacement], inf_neighborhood: bool = False) -> Dict[str, Any]:
 
     C, H, W = cfgs[0].dims
     overlap = cfgs[0].rf_overlap
@@ -137,10 +137,15 @@ def create_position_dict_single_sheet(cfgs: List[LayerPlacement]) -> Dict[str, A
     positions = np.concatenate(position_lists, axis=0)
     positions = jitter_positions(positions, jitter=0.3)
 
-    neighborhood_width = (positions.max() - positions.min()) * 100  # large enough to cover all layers
+    neighborhood_radius = cfgs[0].neighborhood_width / 2
+    if inf_neighborhood:
+        neighborhood_radius = (positions.max() - positions.min()) * 50  # large enough to cover all layers
 
     neighborhood_list = precompute_neighborhoods(
-        positions, radius=neighborhood_width / 2, n_neighborhoods=20_000
+        positions,
+        radius=neighborhood_radius,
+        n_neighborhoods=20_000,
+        inf_neighborhood=inf_neighborhood,
     )
 
     neighborhoods = collapse_and_trim_neighborhoods(
@@ -150,7 +155,7 @@ def create_position_dict_single_sheet(cfgs: List[LayerPlacement]) -> Dict[str, A
     return {
         "positions": positions,
         "neighborhoods": neighborhoods,
-        "radius": cfg.neighborhood_width / 2,
+        "radius": neighborhood_radius,
         "dims": (C * num_layers, H, W),
     }
 
@@ -198,7 +203,7 @@ def create_position_dicts(
                 stream.write(str(POS_VERSION))
 
     else:
-        position_dict = create_position_dict_single_sheet(placement_configs)
+        position_dict = create_position_dict_single_sheet(placement_configs, inf_neighborhood=inf_neighborhood)
         layer_positions = LayerPositions(
             name="single_sheet",
             dims=position_dict["dims"],

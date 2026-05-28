@@ -53,7 +53,7 @@ METHOD_LABELS = {
     "UNOPTIMIZED": "VJEPA",
     "SWAPOPT": "SwapOpt",
     "ONELAYER": "OneLayer",
-    "SOM": "SOM",
+    "SOM": "VJEPA-SOM",
 }
 
 METHOD_COLORS = {

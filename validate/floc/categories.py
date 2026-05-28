@@ -61,6 +61,18 @@ def detailed_VPNL_category_dataset(data_dir=VPNL, frames_per_video=24, video_fps
             datasets[category].append((os.path.join(data_dir, fname), category))
     return datasets
 
+
+def raw_VPNL_category_dataset(data_dir=VPNL, frames_per_video=24, video_fps=12):
+    """Create one VPNL category per filename prefix."""
+    datasets = defaultdict(list)
+    for fname in os.listdir(data_dir):
+        if fname.endswith(('.jpg', '.png', '.jpeg')):
+            category = fname.split('-')[0]
+            if category == 'scrambled':
+                continue
+            datasets[category].append((os.path.join(data_dir, fname), category))
+    return datasets
+
 def KANWISHER_category_dataset(data_dir=KANWISHER, frames_per_video=24, video_fps=12):
     """Create a category dataset for the Kanwisher dataset."""
     datasets = defaultdict(list)
@@ -76,9 +88,10 @@ def KANWISHER_category_dataset(data_dir=KANWISHER, frames_per_video=24, video_fp
     return datasets
 
 
-def functional_localization_one_vs_rest(model, transform, datasets, 
+def functional_localization_one_vs_rest(model, transform, datasets,
                                         batch_size=32, device='cuda', downsampler=None,
-                                        video_fps=12, frames_per_video=24, kanwisher=False):
+                                        video_fps=12, frames_per_video=24, kanwisher=False,
+                                        include_positive_in_rest=False):
 
     # Group files by category
     n_categories = len(datasets)
@@ -92,6 +105,21 @@ def functional_localization_one_vs_rest(model, transform, datasets,
             (0, 0, 0, 1, -1),  # Objects vs Scrambled
         ]
 
+    elif include_positive_in_rest:
+        base_categories = list(datasets.keys())
+        all_items = []
+        for items in datasets.values():
+            all_items.extend(items)
+        datasets = dict(datasets)
+        datasets["all"] = [(path, "all") for path, _ in all_items]
+        categories = list(datasets.keys())
+        all_idx = categories.index("all")
+        contrasts = []
+        for j in range(len(base_categories)):
+            contrast = [0] * len(categories)
+            contrast[j] = 1
+            contrast[all_idx] = -1
+            contrasts.append(contrast)
     else:
         contrasts = [[1 if i == j else -1 for i in range(n_categories)] for j in range(n_categories)]
 
@@ -130,6 +158,8 @@ def localize_categories(model, transform, dataset_name, frames_per_video=24, vid
         datasets = VPNL_category_dataset(frames_per_video=frames_per_video, video_fps=video_fps)
     elif dataset_name == "vpnl_detailed":
         datasets = detailed_VPNL_category_dataset(frames_per_video=frames_per_video, video_fps=video_fps)
+    elif dataset_name == "vpnl_detail_classes":
+        datasets = raw_VPNL_category_dataset(frames_per_video=frames_per_video, video_fps=video_fps)
     elif dataset_name == "kanwisher":
         datasets = KANWISHER_category_dataset(frames_per_video=frames_per_video, video_fps=video_fps)
     else:
@@ -138,7 +168,10 @@ def localize_categories(model, transform, dataset_name, frames_per_video=24, vid
     t_vals_dict, p_vals_dict = functional_localization_one_vs_rest(
         model, transform=transform, datasets=datasets,
         batch_size=batch_size, device=device, downsampler=downsampler,
-        video_fps=video_fps, frames_per_video=frames_per_video, kanwisher=(dataset_name=="kanwisher")
+        video_fps=video_fps,
+        frames_per_video=frames_per_video,
+        kanwisher=(dataset_name=="kanwisher"),
+        include_positive_in_rest=(dataset_name=="vpnl_detail_classes"),
     )
     if ret_pvals:
         return t_vals_dict, p_vals_dict

@@ -1,4 +1,5 @@
 from utils import cached
+from models import llcnn_transform
 from models import vit_transform
 from validate.smoothness import validate_smoothness
 from validate import load_transformed_model
@@ -18,7 +19,7 @@ def _smoothness(
 
     model, epoch = load_transformed_model(checkpoint_name=checkpoint_name, device=device)
     model.eval()
-    transform = vit_transform
+    transform = llcnn_transform if model.__class__.__name__ == "TopoTransformedLLCNN" else vit_transform
     ret = validate_smoothness(
         model,
         transform,

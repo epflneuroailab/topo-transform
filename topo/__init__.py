@@ -93,6 +93,41 @@ def _videomae_name(layer_indices, single_sheet=True, inf_neighborhood=True, tiss
     return name
 
 
+def _toponets_name(layer_name="layer4.1", tau=10.0):
+    layer_tag = layer_name.replace(".", "_")
+    tau_tag = f"{float(tau):g}".replace(".", "p")
+    return f"toponets_resnet18_tau{tau_tag}_{layer_tag}_channel_sheet"
+
+
+def _llcnn_name(layer_name="layer4.1", single_sheet=True, inf_neighborhood=True):
+    name = f"llcnn_{layer_name.replace('.', '_')}_channel_sheet"
+    if single_sheet:
+        name += "_single"
+    if inf_neighborhood:
+        name += "_neighbInf"
+    return name
+
+
+def _channel_sheet_positions(name, dims, tissue_width_mm=70.0):
+    channels, height, width = dims
+    assert channels == 1, f"Expected one channel sheet, got dims={dims}."
+    unit_mm = tissue_width_mm / max(width - 1, 1)
+    coordinates = []
+    for y in range(height):
+        for x in range(width):
+            coordinates.append([x * unit_mm, y * unit_mm])
+    coordinates = np.asarray(coordinates, dtype=np.float32)
+    indices = np.arange(len(coordinates), dtype=np.int64)
+    neighborhood_indices = np.tile(indices[None, :], (len(indices), 1))
+    return LayerPositions(
+        name=name,
+        dims=dims,
+        coordinates=coordinates,
+        neighborhood_indices=neighborhood_indices,
+        neighborhood_width=np.inf,
+    )
+
+
 def _resolve_tissue_configs(
     layer_indices,
     tissue_config="vtc",
@@ -522,6 +557,106 @@ class TopoTransformedVideoMAE(TopoTransformedModel):
         return layer_features, layer_positions
 
 
+class TopoTransformedLLCNN(TopoTransformedModel):
+    def __init__(
+        self,
+        checkpoint_path=None,
+        layer_name="layer4.1",
+        rebuild=False,
+        seed=42,
+        inf_neighborhood=True,
+    ):
+        from models import LLCNNVision
+        from .features import LLCNNFeatureExtractor
+
+        self.single_sheet = True
+        self.no_transform = True
+        self.llcnn_layer_name = layer_name
+
+        name = _llcnn_name(layer_name=layer_name, single_sheet=True, inf_neighborhood=inf_neighborhood)
+        model = LLCNNVision(checkpoint_path=checkpoint_path)
+        extractor = LLCNNFeatureExtractor(layer_name=layer_name)
+
+        layer_config_dir = POSITION_DIR / f"{name}_sd{seed}"
+        if not layer_config_dir.exists() or rebuild:
+            layer_dims = _layer_config_dict(extractor, extractor.layer_dims)
+            layer_tissue_sizes = _layer_config_dict(extractor, [70.0])
+            layer_neighborhood_widths = _layer_config_dict(
+                extractor,
+                [np.inf if inf_neighborhood else 31.818],
+            )
+            layer_rf_overlaps = _layer_config_dict(extractor, [1.0])
+            np.random.seed(seed)
+            layer_positions = create_position_dicts(
+                extractor.layer_names,
+                layer_dims,
+                layer_tissue_sizes,
+                layer_neighborhood_widths,
+                layer_rf_overlaps,
+                save_dir=layer_config_dir,
+                single_sheet=True,
+                inf_neighborhood=inf_neighborhood,
+            )
+        else:
+            layer_positions = _load_single_sheet_positions(
+                extractor,
+                layer_config_dir / "single_sheet.pkl",
+            )
+
+        super().__init__(name, model, extractor, layer_positions, transform=None, rebuild=rebuild, seed=seed)
+
+    def forward(self, inputs, do_transform=True):
+        with torch.no_grad():
+            layer_features = self.extractor.extract_features(self.model, inputs)
+        layer_positions = self.layer_positions
+
+        if self.smoothing:
+            layer_features, layer_positions = self.smooth(layer_features, layer_positions)
+
+        return layer_features, layer_positions
+
+
+class TopoTransformedTopoNets(TopoTransformedModel):
+    def __init__(
+        self,
+        checkpoint_path=None,
+        layer_name="layer4.1.conv2",
+        tau=10.0,
+        seed=42,
+        rebuild=False,
+    ):
+        from models import TopoNetsVision
+        from .features import TopoNetsFeatureExtractor
+
+        self.single_sheet = True
+        self.no_transform = True
+        self.toponets_layer_name = layer_name
+        self.toponets_tau = float(tau)
+
+        name = _toponets_name(layer_name=layer_name, tau=tau)
+        model = TopoNetsVision(tau=tau, checkpoint_path=checkpoint_path)
+        extractor = TopoNetsFeatureExtractor(layer_name=layer_name)
+        layer_positions = [
+            _channel_sheet_positions(
+                extractor.layer_names[0],
+                extractor.layer_dims[0],
+                tissue_width_mm=70.0,
+            )
+        ]
+
+        super().__init__(name, model, extractor, layer_positions, transform=None, rebuild=rebuild, seed=seed)
+
+    def forward(self, inputs, do_transform=True):
+        with torch.no_grad():
+            layer_features = self.extractor.extract_features(self.model, inputs)
+        layer_positions = self.layer_positions
+
+        if self.smoothing:
+            layer_features, layer_positions = self.smooth(layer_features, layer_positions)
+
+        return layer_features, layer_positions
+
+
 class SOMTopoVJEPA(TopoTransformedModel):
     def __init__(
         self,
@@ -571,23 +706,13 @@ class SOMTopoVJEPA(TopoTransformedModel):
         vectors = torch.nn.functional.normalize(vectors, dim=1)
         weights = torch.nn.functional.normalize(self.som_weights, dim=1)
 
-        num_units = self.som_weights.shape[0]
-        activations = torch.full(
-            (bsz * num_units,),
-            -torch.inf,
-            device=features.device,
-            dtype=features.dtype,
-        )
-
+        activation_chunks = []
         for start in range(0, vectors.shape[0], self.activation_chunk_size):
             end = start + self.activation_chunk_size
             chunk = vectors[start:end]
-            similarities, bmu_indices = torch.matmul(chunk, weights.t()).max(dim=1)
-            batch_indices = torch.arange(start, min(end, vectors.shape[0]), device=features.device)
-            flat_indices = batch_indices * num_units + bmu_indices
-            activations.scatter_reduce_(0, flat_indices, similarities, reduce="amax", include_self=True)
+            activation_chunks.append(torch.matmul(chunk, weights.t()))
 
-        activations = torch.where(torch.isfinite(activations), activations, torch.zeros_like(activations))
+        activations = torch.cat(activation_chunks, dim=0)
         grid_h, grid_w = self.grid_shape
         return activations.reshape(bsz, 1, 1, grid_h, grid_w)
 

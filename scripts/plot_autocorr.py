@@ -1,7 +1,10 @@
+import argparse
+
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+from pathlib import Path
 from matplotlib.colors import LinearSegmentedColormap
 
 from .get_validate_features import validate_features
@@ -272,11 +275,39 @@ def visualize_unit_activations_over_time(layer_features, layer_positions, dir_pa
     plt.close(fig)
 
 
-if __name__ == '__main__':
-    all_features, positions = validate_features(MODEL_CKPT)
-    viz_dir = PLOTS_DIR / 'plot_autocorr'
+def main():
+    parser = argparse.ArgumentParser(description='Plot spatial autocorrelation maps for a transformed model checkpoint.')
+    parser.add_argument('--checkpoint_name', default=MODEL_CKPT)
+    parser.add_argument('--output_subdir', default='plot_autocorr')
+    parser.add_argument('--num_probes', type=int, default=5)
+    parser.add_argument('--seed', type=int, default=40)
+    parser.add_argument('--single_sheet', action=argparse.BooleanOptionalAction, default=None)
+    args = parser.parse_args()
+
+    all_features, positions = validate_features(args.checkpoint_name, single_sheet=args.single_sheet)
+    viz_dir = PLOTS_DIR / args.output_subdir
     viz_dir.mkdir(parents=True, exist_ok=True)
 
-    seed = 40 # For reproducibility
-    visualize_random_autocorr(all_features, positions, viz_dir, seed=seed)
-    visualize_unit_activations_over_time(all_features, positions, viz_dir, layer_idx=0, seed=seed)
+    suffix = '_' + Path(args.checkpoint_name).stem
+    if args.single_sheet is not None:
+        suffix += '_single' if args.single_sheet else '_multi'
+    visualize_random_autocorr(
+        all_features,
+        positions,
+        viz_dir,
+        num_probes=args.num_probes,
+        suffix=suffix,
+        seed=args.seed,
+    )
+    visualize_unit_activations_over_time(
+        all_features,
+        positions,
+        viz_dir,
+        layer_idx=0,
+        suffix=suffix,
+        seed=args.seed,
+    )
+
+
+if __name__ == '__main__':
+    main()

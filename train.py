@@ -16,6 +16,7 @@ from data import SmthSmthV2
 from models import clip_transform
 from models import vit_transform
 from topo import GlobalSpatialCorrelationLoss
+from topo import SpatialCorrelationLoss
 from topo import TopoTransformedCLIP
 from topo import TopoTransformedVideoMAE
 from topo import TopoTransformedVJEPA
@@ -100,6 +101,7 @@ def _load_training_state(model, optimizer, scheduler, checkpoint_path, storage, 
     val_losses = []
 
     if not checkpoint_path.exists():
+        print(f"--resume_training is enabled, but no checkpoint found at {checkpoint_path}. Starting from scratch.")
         return start_epoch, best_val_loss, train_losses, val_losses, None
 
     print(f"\n{'=' * 70}\nResuming from: {checkpoint_path}\n{'=' * 70}")
@@ -350,6 +352,7 @@ def get_args():
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--num_epochs", type=int, default=10)
     parser.add_argument("--samples_per_batch", type=int, default=8192 * 2)
+    parser.add_argument("--neighborhoods_per_batch", type=int, default=16)
     parser.add_argument("--tissue_config", choices=["vtc", "small"], default="vtc")
     parser.add_argument("--rf_overlap", type=float, default=None)
     parser.add_argument("--inf_neighborhood", action=argparse.BooleanOptionalAction, default=True)
@@ -357,7 +360,7 @@ def get_args():
     parser.add_argument("--train_split_seed", type=int, default=42)
     parser.add_argument("--use_wandb", action="store_true", help="Enable wandb logging")
     parser.add_argument("--wandb_project", type=str, default="tdann-transform")
-    parser.add_argument("--resume_training", action="store_true")
+    parser.add_argument("--resume_training", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
@@ -397,7 +400,22 @@ def main():
         split_suffix=split_suffix,
     )
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    criterion = GlobalSpatialCorrelationLoss(samples_per_batch=args.samples_per_batch)
+    if args.tissue_config == "small":
+        criterion = SpatialCorrelationLoss(
+            num_layers=len(args.layer_indices),
+            neighborhoods_per_batch=args.neighborhoods_per_batch,
+            single_sheet=True,
+        )
+        print(
+            "Using local neighborhood SpatialCorrelationLoss "
+            f"({args.neighborhoods_per_batch} neighborhoods/batch) for small tissue."
+        )
+    else:
+        criterion = GlobalSpatialCorrelationLoss(samples_per_batch=args.samples_per_batch)
+        print(
+            "Using global sampled SpatialCorrelationLoss "
+            f"({args.samples_per_batch} sampled units/batch)."
+        )
 
     storage_path = config.CACHE_DIR / "train_topo" / config_id
     storage_path.mkdir(parents=True, exist_ok=True)

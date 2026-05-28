@@ -25,6 +25,7 @@ from validate.neural_decoding import decode, make_decoder, run_features
 from data.neural_data.collections.tang2025 import get_compilation
 from data.neural_data import get_data_loader
 from validate import load_transformed_model
+from models import llcnn_transform
 from models import vit_transform
 from utils import cached
 from validate.rois import nsd
@@ -40,6 +41,18 @@ _CLUSTER_K = {
 }
 ROIS = ["face", "place", "body", "v6", "psts"]
 ROI_DISPLAY_NAMES = ["Face", "Place", "Body", "V6", "pSTS"]
+VJEPA_SOM_TOP25_T_THRESHOLDS = {
+    "face": 7.340281963348389,
+    "body": -8.004393577575684,
+    "place": 17.77458953857422,
+}
+VJEPA_SOM_TOP25_P_THRESHOLD = 1.0
+
+
+def _get_decode_transform(model):
+    if model.__class__.__name__ == "TopoTransformedLLCNN":
+        return llcnn_transform
+    return vit_transform
 
 
 def _ensure_leading_dim(values):
@@ -67,11 +80,17 @@ def _mask_from_top_k_clusters(patches, k, total_units):
     return mask
 
 
-def _collect_merged_localizer_values(ckpt_name, fwhm_mm, resolution_mm):
+def _collect_merged_localizer_values(ckpt_name, fwhm_mm, resolution_mm, dataset_names=None):
+    if dataset_names is None:
+        dataset_names = ["vpnl"] if ckpt_name.startswith(("llcnn.", "toponets.")) else None
+    kwargs = {}
+    if dataset_names is not None:
+        kwargs["dataset_names"] = dataset_names
     t_vals_dicts, p_vals_dicts, layer_positions = localizers(
         ckpt_name,
         fwhm_mm=fwhm_mm,
         resolution_mm=resolution_mm,
+        **kwargs,
     )
 
     p_val_dict = {}
@@ -100,13 +119,19 @@ def _get_cluster_masks_model(
     )
 
     masks = []
+    is_vjepa_som = ckpt_name.startswith("som_")
     for roi in rois:
         key = get_localizer_result_key(roi)
         p_vals = p_val_dict[key]
         t_vals = t_val_dict[key]
 
         k = _CLUSTER_K.get(roi, 1)
-        t_thres_used = get_roi_t_threshold(roi, t_thres)
+        if is_vjepa_som and roi in VJEPA_SOM_TOP25_T_THRESHOLDS:
+            t_thres_used = VJEPA_SOM_TOP25_T_THRESHOLDS[roi]
+            p_thres_used = VJEPA_SOM_TOP25_P_THRESHOLD
+        else:
+            t_thres_used = get_roi_t_threshold(roi, t_thres)
+            p_thres_used = p_thres
 
         layer_masks = []
         for layer_idx, (p_val, t_val) in enumerate(zip(p_vals, t_vals)):
@@ -117,7 +142,7 @@ def _get_cluster_masks_model(
                 selectivities=t_val,
                 p_values=p_val,
                 t_threshold=t_thres_used,
-                p_threshold=p_thres,
+                p_threshold=p_thres_used,
             )
             total_units = layer_positions[layer_idx].shape[0]
             layer_masks.append(_mask_from_top_k_clusters(patches, k, total_units))
@@ -137,6 +162,7 @@ def _localizer_decode_clustered(
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model, epoch = load_transformed_model(checkpoint_name=ckpt_name, device=device)
     model.eval()
+    input_transform = _get_decode_transform(model)
 
     masks_model = _get_cluster_masks_model(
         rois,
@@ -158,7 +184,7 @@ def _localizer_decode_clustered(
         for split in range(num_splits):
             print(f"=== Split {split+1}/{num_splits} ===")
             seed = 42 + split
-            trainset, testset, _ = get_compilation(vit_transform, ratios=ratios, seed=seed, type='clip')
+            trainset, testset, _ = get_compilation(input_transform, ratios=ratios, seed=seed, type='clip')
 
             train_loader = get_data_loader(trainset, batch_size=batch_size, shuffle=False, num_workers=batch_size)
             test_loader = get_data_loader(testset, batch_size=batch_size, shuffle=False, num_workers=batch_size)

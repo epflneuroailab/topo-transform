@@ -6,6 +6,21 @@ import numpy as np
 VJEPA_LAYERS = [f'backbone.blocks.{i}' for i in range(24)]
 CLIP_LAYERS = [f"vision_model.encoder.layers.{i}" for i in range(24)]
 VIDEOMAE_LAYERS = [f"encoder.layer.{i}" for i in range(24)]
+LLCNN_LAYERS = {
+    "layer1": ("model.layer1", (1, 8, 8)),
+    "layer2": ("model.layer2", (1, 12, 12)),
+    "layer3": ("model.layer3", (1, 16, 16)),
+    "layer4": ("model.layer4", (1, 23, 23)),
+    "layer4.1": ("model.layer4.1", (1, 23, 23)),
+}
+TOPONETS_LAYERS = {
+    "layer1": ("model.layer1", (1, 8, 8)),
+    "layer2": ("model.layer2", (1, 8, 16)),
+    "layer3": ("model.layer3", (1, 16, 16)),
+    "layer4": ("model.layer4", (1, 16, 32)),
+    "layer4.1": ("model.layer4.1", (1, 16, 32)),
+    "layer4.1.conv2": ("model.layer4.1.conv2", (1, 16, 32)),
+}
 UNIFORMER_LAYERS = [
     *[f'model.blocks1.{i}' for i in range(0,  5)],
     *[f'model.blocks2.{i}' for i in range(0,  8)],
@@ -237,3 +252,101 @@ class TDANNFeatureExtractor(LayerFeatureExtractor):
         else:
             features = super().extract_features(model, inputs)
         return features
+
+
+class TopoNetsFeatureExtractor(LayerFeatureExtractor):
+    """Extract TopoNets channel-sheet activations.
+
+    TopoLoss arranges convolution output channels as a 2D cortical sheet. The
+    activation H/W axes are image-space, so they are averaged before reshaping
+    channels into the TopoLoss sheet.
+    """
+
+    def __init__(self, layer_name="layer4.1"):
+        layer_name, dims = TOPONETS_LAYERS[layer_name]
+        super().__init__([layer_name])
+        self._layer_dims = [dims]
+
+    @property
+    def layer_dims(self):
+        return self._layer_dims
+
+    @property
+    def num_target_layers(self):
+        return 1
+
+    def set_layer_names(self, layer_names):
+        super().set_layer_names(layer_names)
+        reverse = {layer: dims for _, (layer, dims) in TOPONETS_LAYERS.items()}
+        self._layer_dims = [reverse[layer_name] for layer_name in layer_names]
+
+    def extract_features(self, model, inputs):
+        temporal = inputs.ndim == 5
+        if temporal:
+            b, t, c, h, w = inputs.shape
+            inputs = inputs.reshape(b * t, c, h, w)
+        else:
+            b, t = inputs.shape[0], 1
+
+        features = super().extract_features(model, inputs)
+        return [self._process_feature(feature, b, t, dims) for feature, dims in zip(features, self.layer_dims)]
+
+    @staticmethod
+    def _process_feature(feature, b, t, dims):
+        # feature: (B*T, C, image_h, image_w). Average image space, then
+        # reshape channels according to TopoLoss' row-major cortical sheet.
+        feature = feature.mean(dim=(-2, -1))
+        _, channels = feature.shape
+        sheet_channels, sheet_h, sheet_w = dims
+        expected_channels = sheet_channels * sheet_h * sheet_w
+        assert channels == expected_channels, (
+            f"Expected {expected_channels} TopoNets channels for dims {dims}, got {channels}."
+        )
+        feature = feature.reshape(b, t, sheet_channels, sheet_h, sheet_w)
+        return feature
+
+
+class LLCNNFeatureExtractor(LayerFeatureExtractor):
+    def __init__(self, layer_name="layer4.1"):
+        self.llcnn_layer_name = layer_name
+        model_layer, layer_dim = LLCNN_LAYERS[layer_name]
+        self._layer_dims = [layer_dim]
+        super().__init__([model_layer])
+
+    @property
+    def layer_dims(self):
+        return self._layer_dims
+
+    @property
+    def num_target_layers(self):
+        return 1
+
+    def _hook_fn(self, layer_name):
+        def hook(module, input, output):
+            if isinstance(output, tuple):
+                output = output[0]
+            self.outputs[layer_name] = output
+        return hook
+
+    def extract_features(self, model, inputs):
+        temporal = inputs.ndim == 5
+        if temporal:
+            b, t, c, h, w = inputs.shape
+            inputs = inputs.reshape(b * t, c, h, w)
+            features = super().extract_features(model, inputs)
+            features = [self._process_feature(feat, b, t) for feat in features]
+        else:
+            b = inputs.shape[0]
+            features = super().extract_features(model, inputs)
+            features = [self._process_feature(feat, b, 1) for feat in features]
+        return features
+
+    @staticmethod
+    def _process_feature(feature, bsz, time):
+        # LLCNN's topology is defined across the channel lattice; its notebooks
+        # average over image-space H/W before plotting high-level IT maps.
+        feature = feature.mean(dim=(-2, -1))
+        channels = feature.shape[-1]
+        side = int(channels ** 0.5)
+        assert side * side == channels, f"Expected square LLCNN channel lattice, got {channels}."
+        return feature.reshape(bsz, time, 1, side, side)

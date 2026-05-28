@@ -1,8 +1,10 @@
 from torchvision import transforms
 
 from .clip import CLIPVision
+from .llcnn import LLCNNVision
 from .mvit.mvitv1 import MViTV1
 from .tdann import TDANN
+from .toponets import TopoNetsVision
 from .uniformer import UniFormer
 from .videomae import VideoMAEVision
 from .vjepa import VJEPA
@@ -35,20 +37,34 @@ def build_clip_transform():
     )
 
 
+def build_llcnn_transform():
+    return transforms.Compose(
+        [
+            transforms.Resize((224, 224)),
+            transforms.Lambda(lambda img: img / 255.0),
+        ]
+    )
+
+
 vit_transform = build_vit_transform()
 clip_transform = build_clip_transform()
+llcnn_transform = build_llcnn_transform()
 
 
 __all__ = [
     "MViTV1",
     "CLIPVision",
+    "LLCNNVision",
     "TDANN",
+    "TopoNetsVision",
     "UniFormer",
     "VideoMAEVision",
     "VJEPA",
     "VJEPASwapopt",
     "build_clip_transform",
+    "build_llcnn_transform",
     "build_vit_transform",
     "clip_transform",
+    "llcnn_transform",
     "vit_transform",
 ]
