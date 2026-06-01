@@ -1,7 +1,6 @@
 import torch
 from torchvision import transforms
 from pathlib import Path
-from torchcodec.decoders import VideoDecoder
 from tqdm import tqdm
 from collections import defaultdict
 from torch.utils.data import DataLoader, Dataset
@@ -122,6 +121,8 @@ def run_features(model, data_loader, device, downsampler=None):
 
 def safe_decoder(path):
     """Create a VideoDecoder safely"""
+    from torchcodec.decoders import VideoDecoder
+
     return VideoDecoder(path)
 
 

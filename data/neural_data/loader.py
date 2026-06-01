@@ -3,8 +3,6 @@ import torchvision
 from torchvision.io import read_video
 from torchvision.transforms import Compose
 from torch.utils.data import DataLoader, Dataset, Subset
-import torchcodec
-from torchcodec.decoders import VideoDecoder
 import numpy as np
 
 
@@ -121,6 +119,8 @@ def image_transform(path, torch_transforms):
     return image
 
 def safe_decoder(path):
+    from torchcodec.decoders import VideoDecoder
+
     try:
         # first try frame-accurate seek
         return VideoDecoder(path, seek_mode="exact")

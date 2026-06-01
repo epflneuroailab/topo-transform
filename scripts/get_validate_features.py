@@ -91,11 +91,12 @@ def _validate_features(ckpt_name, single_sheet=None):
     return all_features, positions
 
 def _cache_key(ckpt_name: str, single_sheet=None) -> str:
-    safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", Path(ckpt_name).stem)
-    if single_sheet is None:
-        return f"validate_features_{safe_name}"
-    sheet_name = "single" if single_sheet else "multi"
-    return f"validate_features_{safe_name}_{sheet_name}"
+    return "validate_features"  # match current cache
+    # safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", Path(ckpt_name).stem)
+    # if single_sheet is None:
+    #     return f"validate_features_{safe_name}"
+    # sheet_name = "single" if single_sheet else "multi"
+    # return f"validate_features_{safe_name}_{sheet_name}"
 
 
 def validate_features(ckpt_name: str, single_sheet=None):

@@ -6,11 +6,10 @@ import sys
 CORE_PLOTS = (
     "scripts.plot_localizer_decode",
     "scripts.plot_localizers",
-    "scripts.plot_localizers_hierarchy",
+    "scripts.plot_autocorr",
     "scripts.plot_motion_object",
     "scripts.plot_neural_alignment",
     "scripts.plot_smoothness",
-    "scripts.plot_wiring_cost",
     "scripts.plot_localizers_cortex",
     "scripts.plot_hierarchy_alignment",
 )
