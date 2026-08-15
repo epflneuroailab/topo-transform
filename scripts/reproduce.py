@@ -1,6 +1,8 @@
 import argparse
+import runpy
 import subprocess
 import sys
+from pathlib import Path
 
 
 CORE_PLOTS = (
@@ -28,6 +30,12 @@ EXTRA_PLOTS = (
     "scripts.plot_robert_distribution",
     "scripts.plot_single_sheet",
     "scripts.plot_stimulation",
+)
+
+PUBLICATION_PLOTS = (
+    "scripts.plot_fig2b",
+    "scripts.plot_main_panels",
+    "scripts.plot_supplementary_exact",
 )
 
 
@@ -164,6 +172,8 @@ def _plot_modules(args):
         modules.extend(SLOW_PLOTS)
     if args.plot_group in {"extra", "all"}:
         modules.extend(EXTRA_PLOTS)
+    if args.plot_group in {"publication", "all"}:
+        modules.extend(PUBLICATION_PLOTS)
     if args.plots:
         modules.extend(args.plots)
     return tuple(dict.fromkeys(modules))
@@ -171,6 +181,78 @@ def _plot_modules(args):
 
 def _plot_commands(args):
     return [[sys.executable, "-m", module] for module in _plot_modules(args)]
+
+
+def _install_editable_export(output_dir):
+    import matplotlib as mpl
+    from matplotlib.figure import Figure
+
+    import config
+    from scripts.plot_utils import normalize_publication_svg
+
+    mpl.rcParams.update(
+        {
+            "svg.fonttype": "none",
+            "font.family": "sans-serif",
+            "font.sans-serif": ["Arial", "DejaVu Sans"],
+        }
+    )
+    plots_dir = Path(config.PLOTS_DIR).resolve()
+    output_dir = Path(output_dir).resolve()
+    original_savefig = Figure.savefig
+
+    def publication_savefig(figure, fname, *args, **kwargs):
+        if not isinstance(fname, (str, Path)):
+            return original_savefig(figure, fname, *args, **kwargs)
+
+        requested = Path(fname)
+        try:
+            relative = requested.resolve().relative_to(plots_dir)
+        except ValueError:
+            relative = Path(requested.name)
+        base = (output_dir / relative).with_suffix("")
+        base.parent.mkdir(parents=True, exist_ok=True)
+
+        common = dict(kwargs)
+        common.pop("format", None)
+        generated = []
+        for suffix, fmt in ((".svg", "svg"), (".png", "png")):
+            target = base.with_suffix(suffix)
+            original_savefig(figure, target, *args, format=fmt, **common)
+            if fmt == "svg":
+                normalize_publication_svg(target)
+            generated.append(str(target))
+        print("Publication exports:", ", ".join(generated))
+        return generated
+
+    Figure.savefig = publication_savefig
+    return original_savefig
+
+
+def _run_editable_modules(modules, output_dir, fail_fast=False):
+    from matplotlib.figure import Figure
+
+    original_argv = sys.argv[:]
+    original_savefig = _install_editable_export(output_dir)
+    failures = []
+    try:
+        for module in modules:
+            print(f"python -m {module}", flush=True)
+            sys.argv = [module]
+            try:
+                runpy.run_module(module, run_name="__main__")
+            except Exception as exc:
+                failures.append((module, exc))
+                if fail_fast:
+                    break
+    finally:
+        sys.argv = original_argv
+        Figure.savefig = original_savefig
+
+    if failures:
+        for module, exc in failures:
+            print(f"FAILED {module}: {exc}", flush=True)
+        raise SystemExit(1)
 
 
 def get_args():
@@ -185,7 +267,7 @@ def get_args():
     )
     parser.add_argument(
         "--plot_group",
-        choices=["core", "slow", "extra", "all", "none"],
+        choices=["core", "slow", "extra", "publication", "all", "none"],
         default="core",
         help="Plot set to run when stage includes plots.",
     )
@@ -197,6 +279,12 @@ def get_args():
     )
     parser.add_argument("--dry_run", action="store_true")
     parser.add_argument("--fail_fast", action="store_true")
+    parser.add_argument(
+        "--editable",
+        action="store_true",
+        help="Mirror plot outputs as editable SVG and PNG under cache/publication_editable.",
+    )
+    parser.add_argument("--editable_output_dir", default="cache/publication_editable")
 
     parser.add_argument("--data_name", default="kinetics400", choices=["smthsmthv2", "kinetics400", "imagenet"])
     parser.add_argument("--model_name", default="vjepa", choices=["vjepa", "clip", "videomae"])
@@ -240,7 +328,7 @@ def main():
         commands.append(_som_train_command(args))
     if args.stage in {"eval", "all"}:
         commands.append(_eval_command(args))
-    if args.stage in {"plots", "all"} and args.plot_group != "none":
+    if args.stage in {"plots", "all"} and args.plot_group != "none" and not args.editable:
         commands.extend(_plot_commands(args))
 
     failures = []
@@ -250,6 +338,23 @@ def main():
             failures.append((returncode, command))
             if args.fail_fast:
                 break
+
+    if (
+        not failures
+        and args.stage in {"plots", "all"}
+        and args.plot_group != "none"
+        and args.editable
+    ):
+        modules = _plot_modules(args)
+        if args.dry_run:
+            for module in modules:
+                print(f"{sys.executable} -m {module}  # editable")
+        else:
+            _run_editable_modules(
+                modules,
+                args.editable_output_dir,
+                fail_fast=args.fail_fast,
+            )
 
     if failures:
         print("\nFailed commands:", flush=True)

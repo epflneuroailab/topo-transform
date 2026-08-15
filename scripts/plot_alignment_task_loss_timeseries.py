@@ -7,9 +7,9 @@ from pathlib import Path
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
-from matplotlib.ticker import AutoMinorLocator, FormatStrFormatter, MaxNLocator
+from matplotlib.ticker import AutoMinorLocator, FixedLocator, FormatStrFormatter
 
-from config import PLOTS_DIR
+from config import CACHE_DIR, PLOTS_DIR
 from utils import cached
 from .get_neural_alignment import neural_alignment
 from .get_task_performance import task_performance
@@ -18,9 +18,10 @@ from topo.loss import GlobalSpatialCorrelationLoss
 from .plot_utils import savefig
 
 
-DEFAULT_PATTERN = (
-    "/mnt/scratch/ytang/tdann/cache/checkpoints/"
-    "checkpoint_transformed_model_global_vjepa_18_single_neighbInf_"
+DEFAULT_PATTERN = str(
+    CACHE_DIR
+    / "checkpoints"
+    / "checkpoint_transformed_model_global_vjepa_18_single_neighbInf_"
     "smthsmthv2_lr1e-4_bs32_sd40_epoch_*.pt"
 )
 
@@ -143,8 +144,8 @@ def plot_timeseries(epochs, neural_scores, task_scores, topo_loss_scores, save_p
 
     ax_joint.plot(epochs, neural_scores, marker="o", color="#000000", linewidth=1.6, label="Neural alignment")
     ax_joint.set_ylabel("Neural alignment", fontsize=9)
-    ax_joint.yaxis.set_major_locator(MaxNLocator(nbins=4))
-    ax_joint.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
+    ax_joint.yaxis.set_major_locator(FixedLocator([0.804, 0.810, 0.816, 0.822]))
+    ax_joint.yaxis.set_major_formatter(FormatStrFormatter("%.3f"))
 
     ax_joint_right = ax_joint.twinx()
     ax_joint_right.plot(
@@ -153,9 +154,9 @@ def plot_timeseries(epochs, neural_scores, task_scores, topo_loss_scores, save_p
         marker="o",
         color="#6E6E6E",
         linewidth=1.6,
-        label="Task perf. (avg)",
+        label="Task performance",
     )
-    ax_joint_right.set_ylabel("Task perf. (avg)", fontsize=9)
+    ax_joint_right.set_ylabel("Task performance", fontsize=9)
     ax_joint.set_xlabel("Epoch", fontsize=9)
 
     ax_loss.set_box_aspect(1)

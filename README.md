@@ -99,6 +99,24 @@ scripts.plot_hierarchy_alignment
 
 Outputs are written to `cache/plots`. 
 
+To reproduce all cached main, supplementary, and publication-specific panels:
+
+```bash
+python -m scripts.reproduce --stage plots --plot_group all
+```
+
+To mirror the publication-specific panels as editable SVG files with PNG previews:
+
+```bash
+python -m scripts.reproduce --stage plots --plot_group publication --editable
+```
+
+To regenerate the Source Data workbook from the same cached analysis values:
+
+```bash
+python -m scripts.export_source_data --heavy
+```
+
 
 ### Training To Plots
 

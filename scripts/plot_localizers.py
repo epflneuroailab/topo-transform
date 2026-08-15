@@ -102,6 +102,8 @@ def plot_all_rois(
             y_min, y_max = float(np.min(pos[:, 1])), float(np.max(pos[:, 1]))
             ax.set_xlim(x_min - dx / 2, x_max + dx / 2)
             ax.set_ylim(y_min - dy / 2, y_max + dy / 2)
+            for spine in ax.spines.values():
+                spine.set_visible(False)
             # remove ticks
             if group in ['face', 'body']:
                 ax.set_xticks([])

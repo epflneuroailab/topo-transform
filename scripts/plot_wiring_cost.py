@@ -15,10 +15,12 @@ def plot_distance_similarity(
     n_bins=11, 
     subsample=10000,  # the cost scales O(N^2), so subsample for efficiency
     max_distance=65,  # the stats over this are basically ~0 mean with decreasing variance
+    seed=42,
 ):
     """Plot cortical distance vs response similarity with box plots and scatter points"""
     # Convert to numpy and flatten batch dimension
     positions = positions.numpy()  # (N, 2)
+    features = features.cpu().numpy() if hasattr(features, "cpu") else np.asarray(features)
 
     has_time = features.ndim == 5
     if has_time:
@@ -32,7 +34,7 @@ def plot_distance_similarity(
 
     # Subsample for efficiency
     if subsample is not None and features.shape[0] > subsample:
-        indices = np.random.choice(features.shape[0], subsample, replace=False)
+        indices = np.random.default_rng(seed).choice(features.shape[0], subsample, replace=False)
         features = features[indices]
         positions = positions[indices]
 

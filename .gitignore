@@ -54,6 +54,7 @@ ENV/
 *.hdf5
 *.pkl
 *.pickle
+source_data/
 
 # Model checkpoints
 *.pth
