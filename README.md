@@ -163,11 +163,6 @@ Fig S1, Fig S2, Fig S3, Fig S4a, Fig S4b, Fig S4c
 Fig S6, Fig S8a, Fig S8b, Fig S9, Fig S10
 ```
 
-It does not yet generate the submitted workbook's `Fig S12`, `Fig S13`,
-`Fig S15`, `Fig S16`, `Fig S18 decode`, or `Fig S18 gradient` worksheets.
-Consequently, this command reproduces the automated numerical subset, not the
-complete submitted Source Data workbook.
-
 ## Train and Evaluate
 
 Train the default TopoTransform V-JEPA model, evaluate the resulting checkpoint,
