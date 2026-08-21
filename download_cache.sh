@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # --- Configuration ---
-S3_ROOT_URL="s3://epfl-neuroailab-public/david/topo-transform"
-S3_URL="s3://epfl-neuroailab-public/david/topo-transform/debug.zip"
-HTTPS_URL="https://epfl-neuroailab-public.s3.amazonaws.com/david/topo-transform/debug.zip"
+S3_ROOT_URL="s3://epfl-neuroailab-public/Tang2026TopoTransform"
+S3_URL="s3://epfl-neuroailab-public/Tang2026TopoTransform/debug.zip"
+HTTPS_URL="https://epfl-neuroailab-public.s3.amazonaws.com/Tang2026TopoTransform/debug.zip"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 CACHE_DIR="$SCRIPT_DIR/cache"
 TARGET_DIR="$CACHE_DIR/debug"
@@ -60,7 +60,7 @@ if [ "$FULL_DOWNLOAD" -eq 1 ]; then
     fi
 
     echo "Recursively downloading $S3_ROOT_URL into $CACHE_DIR..."
-    aws s3 cp "$S3_ROOT_URL" "$CACHE_DIR" --recursive
+    aws s3 cp "$S3_ROOT_URL" "$CACHE_DIR" --recursive --no-sign-request
     echo "Done. Downloaded into $CACHE_DIR/"
     exit 0
 fi
@@ -69,15 +69,15 @@ cd "$CACHE_DIR"
 
 FILENAME="$(basename "$S3_URL")"
 
-# # --- Download ---
-# echo "Downloading $FILENAME..."
-# if command -v aws >/dev/null 2>&1; then
-#     echo "Using aws cli from $S3_URL"
-#     aws s3 cp "$S3_URL" "$FILENAME"
-# else
-#     echo "Using HTTPS fallback from $HTTPS_URL"
-#     curl -fL -o "$FILENAME" "$HTTPS_URL"
-# fi
+# --- Download ---
+echo "Downloading $FILENAME..."
+if command -v aws >/dev/null 2>&1; then
+    echo "Using aws cli from $S3_URL"
+    aws s3 cp "$S3_URL" "$FILENAME" --no-sign-request
+else
+    echo "Using HTTPS fallback from $HTTPS_URL"
+    curl -fL -o "$FILENAME" "$HTTPS_URL"
+fi
 
 # --- Extract ---
 echo "Extracting $FILENAME..."
